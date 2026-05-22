@@ -3,7 +3,9 @@ import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 
 import '../../../core/chat/chat_message_metadata.dart';
+import '../../../core/chat/tool_activity_log.dart';
 import '../../../core/theme/app_colors.dart';
+import 'tool_activity_panel.dart';
 
 /// Hermes 等待回复时的打字动画气泡。
 class HermesLoadingBubble extends StatelessWidget {
@@ -20,6 +22,7 @@ class HermesLoadingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final toolLog = parseToolLog(message.metadata);
     final progress = toolProgress ?? extractToolProgressLine(message.text);
 
     return Padding(
@@ -40,21 +43,12 @@ class HermesLoadingBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  ToolActivityPanel(entries: toolLog, currentProgress: progress),
                   const IsTypingIndicator(
                     size: 7,
                     spacing: 4,
                     color: AppColors.gray,
                   ),
-                  if (progress != null && progress.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      progress,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.gray,
-                            height: 1.35,
-                          ),
-                    ),
-                  ],
                   const SizedBox(height: 4),
                   TimeAndStatus(
                     time: message.resolvedTime,

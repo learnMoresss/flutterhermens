@@ -20,6 +20,12 @@ import '../../core/chat/chat_shortcuts.dart';
 import '../../core/chat/media_url_rewrite.dart';
 import '../../core/chat/session_groups.dart';
 import '../../core/chat/slash_commands.dart';
+import '../../core/chat/tool_activity_log.dart';
+import '../../core/device_actions/device_action_executor.dart';
+import '../../core/device_actions/device_action_model.dart';
+import '../../core/device_actions/device_action_parser.dart';
+import '../../core/device_actions/device_action_store.dart';
+import '../../core/platform/chat_generation_foreground.dart';
 import '../../core/network/agent_admin_api.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/hermes_sessions_api.dart';
@@ -27,6 +33,7 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/app_project_providers.dart';
 import '../../providers/app_providers.dart';
 import 'widgets/markdown_message_bubble.dart';
+import 'widgets/message_bubble_shell.dart';
 import 'widgets/slash_command_palette.dart';
 
 const _userId = 'user';
@@ -42,7 +49,7 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver {
   late final InMemoryChatController _chatController;
   late final TextEditingController _textController;
   final _users = <String, User>{
@@ -60,6 +67,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _showSlashPalette = false;
   bool _autoYoloPrefix = false;
   bool _createAppMode = false;
+  bool _autoApproveDeviceActions = false;
   bool _fastMode = false;
   String? _sessionsError;
   String? _activeSessionId;
@@ -73,6 +81,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   ({String name, String mimeType, String base64, bool isText})? _pendingFile;
   String _toolProgress = '';
   CancelToken? _streamCancelToken;
+  Completer<void>? _activeStreamCompleter;
   bool _followBottom = true;
   bool _suppressAutoScroll = false;
   Timer? _scrollDebounce;
@@ -90,10 +99,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   HermesSessionsApi? _sessionsApi;
   AgentAdminApi? _agentApi;
+  DeviceActionStore? _deviceActionStore;
+  int _deviceActionTick = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _chatController = InMemoryChatController();
     _textController = TextEditingController();
     _textController.addListener(_onComposerTextChanged);
@@ -116,6 +128,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _streamCancelToken?.cancel('页面关闭');
+    unawaited(ChatGenerationForeground.stop());
     _scrollDebounce?.cancel();
     final scroll = _chatScrollControllerBacking;
     if (scroll != null) {
@@ -127,6 +142,78 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _textController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncSessionOnResume());
+    }
+  }
+
+  Future<void> _syncSessionOnResume() async {
+    final sid = _activeSessionId;
+    if (sid == null || _sessionsApi == null || _isTyping) return;
+    try {
+      final history = await _sessionsApi!.loadMessages(sid);
+      if (!mounted || _activeSessionId != sid || _isTyping) return;
+      final messages = <Message>[];
+      for (final m in history) {
+        if (m.content.trim().isEmpty) continue;
+        messages.add(
+          Message.text(
+            id: const Uuid().v4(),
+            authorId: m.role == 'assistant' ? _assistantId : _userId,
+            createdAt: m.createdAt ?? DateTime.now(),
+            text: m.content,
+          ),
+        );
+      }
+      if (messages.isNotEmpty) {
+        await _chatController.setMessages(messages);
+        await _hydrateDeviceActionMessages();
+      }
+    } on ApiException {
+      /* 静默失败 */
+    }
+  }
+
+  Future<void> _waitForStreamIdle() async {
+    final completer = _activeStreamCompleter;
+    if (completer == null || completer.isCompleted) return;
+    try {
+      await completer.future.timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      /* 超时后继续发送 */
+    }
+  }
+
+  Future<TextMessage> _finalizeAssistantMessage({
+    required TextMessage current,
+    required StringBuffer buffer,
+    required List<ToolActivityEntry> toolLog,
+    required bool interrupted,
+  }) async {
+    final raw = buffer.toString().trim();
+    String text;
+    if (raw.isNotEmpty) {
+      var body = await rewriteMediaUrlsAsync(raw, client: _client());
+      if (interrupted) body = '$body$kInterruptedFooter';
+      text = body;
+    } else if (toolLog.isNotEmpty) {
+      text = formatToolLogSummary(toolLog);
+      if (interrupted) text = '$text$kInterruptedFooter';
+    } else if (interrupted) {
+      text = '（已中断）';
+    } else {
+      return current;
+    }
+    final updated = current.copyWith(
+      text: text,
+      metadata: mergeToolLogMetadata(current.metadata, toolLog),
+    );
+    await _chatController.updateMessage(current, updated);
+    return updated;
   }
 
   ApiClient _client() => ref.read(gatewayClientProvider);
@@ -204,6 +291,123 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  void _ensureDeviceActionStore() {
+    _deviceActionStore ??= DeviceActionStore(ref.read(sharedPreferencesProvider));
+  }
+
+  String _deviceActionScope(TextMessage message) {
+    final sid = _activeSessionId;
+    if (sid != null && sid.isNotEmpty) return sid;
+    return 'msg:${message.id}';
+  }
+
+  List<DeviceAction> _deviceActionsFor(TextMessage message) {
+    _ensureDeviceActionStore();
+    final scope = _deviceActionScope(message);
+    final parsed = parseAssistantContent(message.text);
+    return parsed.actions
+        .map((a) => _deviceActionStore!.applyStoredStatus(scope, a))
+        .toList(growable: false);
+  }
+
+  Future<void> _commitDeviceActionStatus(
+    TextMessage message,
+    DeviceAction action,
+    DeviceActionStatus status, {
+    String? error,
+  }) async {
+    _ensureDeviceActionStore();
+    final scope = _deviceActionScope(message);
+    await _deviceActionStore!.setStatus(scope, action.id, status, error: error);
+    final updatedAction = action.copyWith(status: status, errorMessage: error);
+    final newText = patchDeviceActionInMessage(message.text, updatedAction);
+    if (newText != message.text) {
+      await _chatController.updateMessage(message, message.copyWith(text: newText));
+    }
+  }
+
+  Future<void> _hydrateDeviceActionMessages() async {
+    final scope = _activeSessionId;
+    if (scope == null || scope.isEmpty) return;
+    _ensureDeviceActionStore();
+    for (final message in _chatController.messages) {
+      if (message is! TextMessage || message.authorId != _assistantId) continue;
+      if (!message.text.contains('hermes-device-action')) continue;
+      var text = message.text;
+      var changed = false;
+      for (final action in parseAssistantContent(text).actions) {
+        final resolved = _deviceActionStore!.applyStoredStatus(scope, action);
+        if (resolved.status == action.status && resolved.errorMessage == action.errorMessage) {
+          continue;
+        }
+        final patched = patchDeviceActionInMessage(text, resolved);
+        if (patched != text) {
+          text = patched;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await _chatController.updateMessage(message, message.copyWith(text: text));
+      }
+    }
+    if (mounted) setState(() => _deviceActionTick++);
+  }
+
+  Future<void> _migrateDeviceActionScopes(String sessionId) async {
+    if (sessionId.isEmpty) return;
+    _ensureDeviceActionStore();
+    for (final message in _chatController.messages) {
+      if (message is! TextMessage || message.authorId != _assistantId) continue;
+      for (final action in parseAssistantContent(message.text).actions) {
+        await _deviceActionStore!.migrateScope(
+          fromScope: 'msg:${message.id}',
+          toScope: sessionId,
+          actionId: action.id,
+        );
+      }
+    }
+  }
+
+  Future<void> _approveDeviceAction(TextMessage message, DeviceAction action) async {
+    final result = await DeviceActionExecutor.execute(action);
+    final status = result.success ? DeviceActionStatus.executed : DeviceActionStatus.failed;
+    await _commitDeviceActionStatus(
+      message,
+      action,
+      status,
+      error: result.success ? null : result.message,
+    );
+    result.showToast();
+    if (mounted) setState(() => _deviceActionTick++);
+  }
+
+  Future<void> _denyDeviceAction(TextMessage message, DeviceAction action) async {
+    await _commitDeviceActionStatus(message, action, DeviceActionStatus.denied);
+    if (mounted) setState(() => _deviceActionTick++);
+  }
+
+  Future<void> _maybeAutoExecuteDeviceActions(TextMessage message) async {
+    if (!_autoApproveDeviceActions) return;
+    for (final action in _deviceActionsFor(message)) {
+      if (action.status != DeviceActionStatus.pending) continue;
+      await _approveDeviceAction(message, action);
+    }
+  }
+
+  Future<void> _deleteMessage(Message message) async {
+    final next = _chatController.messages.where((m) => m.id != message.id).toList();
+    await _chatController.setMessages(next);
+  }
+
+  bool _canModifyMessage(TextMessage message, int index) {
+    if (message.text == kHermesLoadingText || isHermesLoadingText(message.text)) {
+      return false;
+    }
+    if (isUiOnlyAssistantText(message.text)) return false;
+    if (_isTyping && index == 0 && message.authorId == _assistantId) return false;
+    return true;
+  }
+
   void _ensureClient() {
     final client = _client();
     _sessionsApi = HermesSessionsApi.fromClient(client);
@@ -268,6 +472,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _initialized = true;
     _autoYoloPrefix = ref.read(appStorageProvider).autoYoloPrefix;
     _createAppMode = ref.read(appStorageProvider).createAppMode;
+    _autoApproveDeviceActions = ref.read(appStorageProvider).autoApproveDeviceActions;
+    _deviceActionStore = DeviceActionStore(ref.read(sharedPreferencesProvider));
+    unawaited(DeviceActionExecutor.ensureInitialized());
     _ensureClient();
     await _loadModels();
     await _refreshSessions(silent: true);
@@ -384,6 +591,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         );
       }
       await _chatController.setMessages(messages);
+      if (!mounted) return;
+      await _hydrateDeviceActionMessages();
       if (!mounted) return;
       setState(() {
         _activeSessionId = session.id;
@@ -909,6 +1118,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  Future<void> _toggleAutoApproveDeviceActions(bool value) async {
+    await ref.read(appStorageProvider).setAutoApproveDeviceActions(value);
+    setState(() => _autoApproveDeviceActions = value);
+    if (mounted) {
+      AppMessage.info(value ? '已开启：设备操作将自动批准并执行' : '已关闭自动批准设备操作');
+    }
+  }
+
   Future<void> _showComposerMoreSheet() async {
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -960,6 +1177,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           unawaited(_toggleAutoYolo(v));
                         },
                 ),
+                SwitchListTile(
+                  title: const Text('自动批准设备操作'),
+                  subtitle: const Text('日历、提醒等卡片无需手动点批准（默认关）'),
+                  value: _autoApproveDeviceActions,
+                  onChanged: _isTyping
+                      ? null
+                      : (v) {
+                          Navigator.pop(ctx);
+                          unawaited(_toggleAutoApproveDeviceActions(v));
+                        },
+                ),
               ],
             ),
           ),
@@ -1002,7 +1230,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ),
         });
       } else {
-        out.add({'role': role, 'content': msg.text});
+        final content =
+            role == 'assistant' ? stripDeviceActionBlocks(msg.text) : msg.text;
+        out.add({'role': role, 'content': content});
       }
     }
     return out;
@@ -1028,10 +1258,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     trimmed = _composeSendText(trimmed);
     final hasImages = _pendingImages.isNotEmpty;
     final hasFile = _pendingFile != null;
-    if ((trimmed.isEmpty && !hasImages && !hasFile) || _isTyping) return;
+    if (trimmed.isEmpty && !hasImages && !hasFile) return;
+
+    if (_isTyping) {
+      _streamCancelToken?.cancel('用户发送新消息');
+      await _waitForStreamIdle();
+    }
 
     _ensureClient();
     _streamCancelToken = CancelToken();
+    _activeStreamCompleter = Completer<void>();
+    unawaited(ChatGenerationForeground.start(progress: 'Hermes 正在思考…'));
 
     final images = List.of(_pendingImages);
     final file = _pendingFile;
@@ -1085,6 +1322,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     await _chatController.insertMessage(assistantMessage);
 
     final buffer = StringBuffer();
+    var toolLog = <ToolActivityEntry>[];
     try {
       await _client().streamChat(
         messages: apiMessages,
@@ -1098,11 +1336,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           if (mounted && sid.isNotEmpty) {
             setState(() => _activeSessionId = sid);
             _persistActiveSession();
+            unawaited(_migrateDeviceActionScopes(sid));
           }
         },
         onEvent: (event) {
           if (event is ChatToolProgress) {
-            setState(() => _toolProgress = event.detail);
+            toolLog = upsertToolLogEntry(toolLog, event);
+            final progressLabel = event.detail.isNotEmpty ? event.detail : (event.tool ?? '工具');
+            setState(() => _toolProgress = progressLabel);
+            unawaited(ChatGenerationForeground.updateProgress('正在执行：$progressLabel'));
+            final current = assistantMessage;
+            if (current is! TextMessage) return;
+            final textOut = buffer.isEmpty ? kHermesLoadingText : rewriteMediaUrlsLite(buffer.toString());
+            final updated = current.copyWith(
+              text: textOut,
+              metadata: mergeToolLogMetadata(current.metadata, toolLog),
+            );
+            _chatController.updateMessage(current, updated);
+            assistantMessage = updated;
             return;
           }
           if (event is ChatUsageStats) {
@@ -1117,11 +1368,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             buffer.write(event.text);
             final current = assistantMessage;
             if (current is! TextMessage) return;
-            var textOut = rewriteMediaUrlsLite(buffer.toString());
-            if (_toolProgress.isNotEmpty) {
-              textOut = '⏳ $_toolProgress\n\n$textOut';
-            }
-            final updated = current.copyWith(text: textOut.isEmpty ? kHermesLoadingText : textOut);
+            final textOut = rewriteMediaUrlsLite(buffer.toString());
+            final updated = current.copyWith(
+              text: textOut.isEmpty ? kHermesLoadingText : textOut,
+              metadata: mergeToolLogMetadata(current.metadata, toolLog),
+            );
             _chatController.updateMessage(current, updated);
             assistantMessage = updated;
             if (_followBottom && _isNearChatBottom) {
@@ -1135,17 +1386,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (current is TextMessage && buffer.isNotEmpty) {
         if (mounted) {
           final client = _client();
-          var finalized = await rewriteMediaUrlsAsync(buffer.toString(), client: client);
+          final finalized = await rewriteMediaUrlsAsync(buffer.toString(), client: client);
           if (!mounted) return;
-          if (_toolProgress.isNotEmpty) {
-            finalized = '⏳ $_toolProgress\n\n$finalized';
-          }
-          final updated = current.copyWith(text: finalized);
+          final updated = current.copyWith(
+            text: finalized,
+            metadata: mergeToolLogMetadata(current.metadata, toolLog),
+          );
           await _chatController.updateMessage(current, updated);
+          assistantMessage = updated;
+          await _maybeAutoExecuteDeviceActions(updated);
         }
       } else if (current is TextMessage && buffer.isEmpty) {
-        final updated = current.copyWith(text: '（空响应）');
-        await _chatController.updateMessage(current, updated);
+        if (toolLog.isNotEmpty) {
+          final updated = current.copyWith(
+            text: formatToolLogSummary(toolLog),
+            metadata: mergeToolLogMetadata(current.metadata, toolLog),
+          );
+          await _chatController.updateMessage(current, updated);
+          assistantMessage = updated;
+          await _maybeAutoExecuteDeviceActions(updated);
+        } else {
+          final updated = current.copyWith(text: '（空响应）');
+          await _chatController.updateMessage(current, updated);
+        }
       }
       await _refreshSessions(silent: true);
       if (_activeSessionId != null) {
@@ -1159,11 +1422,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } on ApiException catch (e) {
       final current = assistantMessage;
       if (current is TextMessage) {
-        final msg = e.message == '已停止生成' ? '（已停止）' : '请求失败：${e.message}';
-        final updated = current.copyWith(text: msg);
-        await _chatController.updateMessage(current, updated);
+        if (e.message == '已停止生成') {
+          assistantMessage = await _finalizeAssistantMessage(
+            current: current,
+            buffer: buffer,
+            toolLog: toolLog,
+            interrupted: true,
+          );
+        } else {
+          final updated = current.copyWith(text: '请求失败：${e.message}');
+          await _chatController.updateMessage(current, updated);
+        }
       }
     } finally {
+      unawaited(ChatGenerationForeground.stop());
+      _activeStreamCompleter?.complete();
+      _activeStreamCompleter = null;
       if (mounted) {
         setState(() {
           _isTyping = false;
@@ -1531,7 +1805,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
             textMessageBuilder: (context, message, index, {required isSentByMe, groupStatus}) {
               final needsApproval = !isSentByMe && messageNeedsApproval(message.text);
-              return MarkdownMessageBubble(
+              final isLiveAssistant =
+                  !isSentByMe && _isTyping && message.authorId == _assistantId && index == 0;
+              final _ = _deviceActionTick;
+              final deviceActions =
+                  !isSentByMe ? _deviceActionsFor(message) : const <DeviceAction>[];
+              final bubble = MarkdownMessageBubble(
                 message: message,
                 index: index,
                 isSentByMe: isSentByMe,
@@ -1539,6 +1818,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onApprove: needsApproval ? () => _handleSend('/approve') : null,
                 onDeny: needsApproval ? () => _handleSend('/deny') : null,
                 onContentExpanded: () => _onMessageContentExpanded(index),
+                liveToolProgress: isLiveAssistant ? _toolProgress : null,
+                deviceActions: deviceActions,
+                onApproveDeviceAction: (action) => _approveDeviceAction(message, action),
+                onDenyDeviceAction: (action) => _denyDeviceAction(message, action),
+              );
+              return MessageBubbleShell(
+                message: message,
+                isSentByMe: isSentByMe,
+                canModify: _canModifyMessage(message, index),
+                onDelete: () => _deleteMessage(message),
+                onResend: isSentByMe && !_isTyping
+                    ? () => unawaited(_handleSend(message.text))
+                    : null,
+                onEdit: isSentByMe && !_isTyping
+                    ? () {
+                        _textController.text = message.text;
+                        _textController.selection = TextSelection.collapsed(
+                          offset: _textController.text.length,
+                        );
+                      }
+                    : null,
+                child: bubble,
               );
             },
             composerBuilder: (context) => Composer(
@@ -1548,10 +1849,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
               sigmaX: 0,
               sigmaY: 0,
-              hintText: '输入消息…',
+              hintText: _isTyping ? '输入消息可打断并发送…' : '输入消息…',
               sendOnEnter: true,
               textInputAction: TextInputAction.send,
-              sendButtonDisabled: _isTyping,
+              sendButtonDisabled: _isCompressingImage,
               inputBorder: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(4)),
                 borderSide: BorderSide(color: AppColors.grayLight, width: 1),

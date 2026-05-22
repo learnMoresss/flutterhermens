@@ -24,7 +24,7 @@ class AgentHubPage extends StatelessWidget {
       showDivider: true,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
-        onPressed: () => context.go('/home/config'),
+        onPressed: () => context.go('/home/workspace?tab=1'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -47,7 +47,7 @@ class AgentHubPage extends StatelessWidget {
                 title: Text(item.title),
                 subtitle: Text(item.subtitle, style: const TextStyle(fontSize: 12)),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/home/config/agent/${item.route}'),
+                onTap: () => context.push('/home/workspace/agent/${item.route}'),
               ),
             ),
           ),

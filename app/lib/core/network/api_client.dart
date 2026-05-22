@@ -28,8 +28,19 @@ class ChatTextDelta extends ChatStreamEvent {
 }
 
 class ChatToolProgress extends ChatStreamEvent {
-  const ChatToolProgress(this.detail);
+  const ChatToolProgress({
+    required this.detail,
+    this.tool,
+    this.label,
+    this.status,
+    this.toolCallId,
+  });
+
   final String detail;
+  final String? tool;
+  final String? label;
+  final String? status;
+  final String? toolCallId;
 }
 
 class ChatUsageStats extends ChatStreamEvent {
@@ -111,7 +122,8 @@ class ApiClient {
         },
       ),
     );
-    if (_onRefreshToken != null) {
+    final refreshToken = _onRefreshToken;
+    if (refreshToken != null) {
       _dio.interceptors.add(
         InterceptorsWrapper(
           onError: (error, handler) async {
@@ -131,7 +143,7 @@ class ApiClient {
               }
               return handler.next(error);
             }
-            _refreshInFlight = _onRefreshToken!();
+            _refreshInFlight = refreshToken();
             try {
               final newToken = await _refreshInFlight;
               if (newToken != null && newToken.isNotEmpty) {
@@ -309,6 +321,43 @@ class ApiClient {
 
       final buffer = StringBuffer();
       var sseBuffer = '';
+      var currentEvent = '';
+
+      void handleSseData(String payload) {
+        if (payload.isEmpty || payload == '[DONE]') return;
+
+        Map<String, dynamic>? data;
+        try {
+          data = jsonDecode(payload) as Map<String, dynamic>;
+        } on Object {
+          return;
+        }
+
+        if (currentEvent == 'hermes.tool.progress') {
+          final progress = _parseToolProgressPayload(data);
+          if (progress != null) onEvent?.call(progress);
+          currentEvent = '';
+          return;
+        }
+
+        final toolProgress = _extractToolProgress(data);
+        if (toolProgress != null) {
+          onEvent?.call(toolProgress);
+          return;
+        }
+
+        final usage = _extractUsage(data);
+        if (usage != null) {
+          onEvent?.call(usage);
+          return;
+        }
+
+        final delta = _extractDeltaText(data);
+        if (delta != null && delta.isNotEmpty) {
+          buffer.write(delta);
+          onEvent?.call(ChatTextDelta(delta));
+        }
+      }
 
       await for (final chunk in response.data?.stream ?? const Stream.empty()) {
         sseBuffer += utf8.decode(chunk, allowMalformed: true);
@@ -317,34 +366,25 @@ class ApiClient {
 
         for (final line in parts) {
           final trimmed = line.trim();
+          if (trimmed.isEmpty) {
+            currentEvent = '';
+            continue;
+          }
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.substring(6).trim();
+            continue;
+          }
           if (!trimmed.startsWith('data:')) continue;
-          final payload = trimmed.substring(5).trim();
-          if (payload.isEmpty || payload == '[DONE]') continue;
+          handleSseData(trimmed.substring(5).trim());
+        }
+      }
 
-          Map<String, dynamic>? data;
-          try {
-            data = jsonDecode(payload) as Map<String, dynamic>;
-          } on Object {
-            continue;
-          }
-
-          final toolProgress = _extractToolProgress(data);
-          if (toolProgress != null) {
-            onEvent?.call(ChatToolProgress(toolProgress));
-            continue;
-          }
-
-          final usage = _extractUsage(data);
-          if (usage != null) {
-            onEvent?.call(usage);
-            continue;
-          }
-
-          final delta = _extractDeltaText(data);
-          if (delta != null && delta.isNotEmpty) {
-            buffer.write(delta);
-            onEvent?.call(ChatTextDelta(delta));
-          }
+      if (sseBuffer.trim().isNotEmpty) {
+        final trimmed = sseBuffer.trim();
+        if (trimmed.startsWith('event:')) {
+          currentEvent = trimmed.substring(6).trim();
+        } else if (trimmed.startsWith('data:')) {
+          handleSseData(trimmed.substring(5).trim());
         }
       }
 
@@ -383,8 +423,9 @@ class ApiClient {
 
     final parts = <Map<String, dynamic>>[];
     final buffer = StringBuffer(text);
-    if (hasFiles) {
-      for (final f in files!) {
+    final fileList = files;
+    if (fileList != null && fileList.isNotEmpty) {
+      for (final f in fileList) {
         if (f.isText) {
           buffer.writeln('\n\n--- ${f.name} ---\n${utf8.decode(base64Decode(f.base64))}');
         } else {
@@ -392,8 +433,9 @@ class ApiClient {
         }
       }
     }
-    if (hasImages) {
-      for (final img in images!) {
+    final imageList = images;
+    if (imageList != null && imageList.isNotEmpty) {
+      for (final img in imageList) {
         final url = img.url.trim();
         if (url.startsWith('http://') || url.startsWith('https://')) {
           buffer.writeln('\n[图片 URL: $url]');
@@ -404,8 +446,8 @@ class ApiClient {
       'type': 'text',
       'text': buffer.toString().trim().isEmpty ? '请分析附件' : buffer.toString().trim(),
     });
-    if (hasImages) {
-      for (final img in images!) {
+    if (imageList != null && imageList.isNotEmpty) {
+      for (final img in imageList) {
         final url = img.url.trim();
         if (url.isEmpty || url.startsWith('data:')) continue;
         parts.add({
@@ -449,11 +491,28 @@ class ApiClient {
     );
   }
 
-  static String? _extractToolProgress(Map<String, dynamic> data) {
+  static ChatToolProgress? _parseToolProgressPayload(Map<String, dynamic> data) {
+    final tool = data['tool']?.toString();
+    final label = data['label']?.toString();
+    final status = data['status']?.toString();
+    final toolCallId = data['toolCallId']?.toString() ?? data['call_id']?.toString();
+    final detail = (label?.trim().isNotEmpty == true)
+        ? label!.trim()
+        : (data['message'] ?? data['detail'] ?? tool)?.toString() ?? '';
+    if (detail.isEmpty && tool == null) return null;
+    return ChatToolProgress(
+      detail: detail,
+      tool: tool,
+      label: label,
+      status: status,
+      toolCallId: toolCallId,
+    );
+  }
+
+  static ChatToolProgress? _extractToolProgress(Map<String, dynamic> data) {
     final type = data['type']?.toString();
     if (type == 'hermes.tool.progress') {
-      final msg = data['message'] ?? data['detail'] ?? data['tool'];
-      return msg?.toString();
+      return _parseToolProgressPayload(data);
     }
     return null;
   }

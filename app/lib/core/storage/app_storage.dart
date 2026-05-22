@@ -60,6 +60,14 @@ class AppStorage {
     await _prefs.setBool(_createAppModeKey, value);
   }
 
+  static const _autoApproveDeviceActionsKey = 'chat_auto_approve_device_actions';
+
+  bool get autoApproveDeviceActions => _prefs.getBool(_autoApproveDeviceActionsKey) ?? false;
+
+  Future<void> setAutoApproveDeviceActions(bool value) async {
+    await _prefs.setBool(_autoApproveDeviceActionsKey, value);
+  }
+
   ThemeMode loadThemeMode() {
     final raw = _prefs.getString(_themeModeKey);
     return switch (raw) {

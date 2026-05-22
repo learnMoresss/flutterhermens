@@ -18,11 +18,9 @@ import '../../features/agent/agent_providers_page.dart' deferred as agent_provid
 import '../../features/agent/agent_skills_page.dart' deferred as agent_skills;
 import '../../features/agent/agent_soul_page.dart' deferred as agent_soul;
 import '../../features/agent/agent_toolsets_page.dart' deferred as agent_toolsets;
-import '../../features/apps/apps_page.dart' deferred as apps;
 import '../../features/chat/chat_page.dart' deferred as chat;
-import '../../features/docker/docker_page.dart' deferred as docker;
 import '../../features/gateway/message_gateway_page.dart' deferred as message_gateway;
-import '../../features/hermes_console/hermes_console_page.dart' deferred as hermes_console;
+import '../../features/main/workspace_page.dart' deferred as workspace;
 import '../../features/main/main_shell.dart' deferred as main_shell;
 import '../../features/profile/profile_page.dart' deferred as profile;
 import '../../features/schedules/schedules_page.dart' deferred as schedules;
@@ -83,21 +81,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/home/apps',
+                path: '/home/workspace',
                 builder: (context, state) => deferredPage(
-                  loadLibrary: apps.loadLibrary,
-                  builder: () => apps.AppsPage(),
-                ),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/home/config',
-                builder: (context, state) => deferredPage(
-                  loadLibrary: hermes_console.loadLibrary,
-                  builder: () => hermes_console.HermesConsolePage(),
+                  loadLibrary: workspace.loadLibrary,
+                  builder: () => workspace.WorkspacePage(),
                 ),
                 routes: [
                   GoRoute(
@@ -179,17 +166,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/home/docker',
-                builder: (context, state) => deferredPage(
-                  loadLibrary: docker.loadLibrary,
-                  builder: () => docker.DockerPage(),
-                ),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
                 path: '/home/profile',
                 builder: (context, state) => deferredPage(
                   loadLibrary: profile.loadLibrary,
@@ -203,6 +179,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/home',
         redirect: (context, state) => '/home/chat',
+      ),
+      GoRoute(
+        path: '/home/apps',
+        redirect: (context, state) => '/home/workspace',
+      ),
+      GoRoute(
+        path: '/home/config',
+        redirect: (context, state) => '/home/workspace?tab=1',
+      ),
+      GoRoute(
+        path: '/home/docker',
+        redirect: (context, state) => '/home/workspace?tab=2',
       ),
     ],
   );

@@ -10,6 +10,7 @@ import {
   injectTargetProjectContext,
 } from '../admin/create-app-prompt.js';
 import { injectMobileBffSystemPrompt } from '../admin/mobile-bff-prompt.js';
+import { injectMobileDeviceActionsPrompt } from '../admin/mobile-device-actions-prompt.js';
 import { rewriteJsonResponse } from '../admin/media-url-rewrite.js';
 import {
   attachUnlockOnStreamEnd,
@@ -83,6 +84,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       let messages = injectMobileBffSystemPrompt(chatFields.messages);
+      messages = injectMobileDeviceActionsPrompt(messages);
       if (create_app_mode) {
         messages = injectCreateAppSystemPrompt(messages);
         if (targetSlug) {

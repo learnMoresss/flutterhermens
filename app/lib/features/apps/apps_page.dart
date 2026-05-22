@@ -15,9 +15,24 @@ import '../../providers/app_providers.dart';
 import 'hermes_app_bridge.dart';
 import 'project_html_inject.dart';
 import '../../shared/widgets/mono_button.dart';
+import '../main/workspace_chrome.dart';
 
 class AppsPage extends ConsumerStatefulWidget {
-  const AppsPage({super.key});
+  const AppsPage({
+    super.key,
+    this.embedded = false,
+    this.onOpenDrawer,
+    this.onChromeChanged,
+  });
+
+  final bool embedded;
+  final VoidCallback? onOpenDrawer;
+  final ValueChanged<WorkspaceChrome>? onChromeChanged;
+
+  static void notifyDrawerOpened(BuildContext context) {
+    final state = context.findAncestorStateOfType<_AppsPageState>();
+    state?._onDrawerOpened();
+  }
 
   @override
   ConsumerState<AppsPage> createState() => _AppsPageState();
@@ -139,6 +154,49 @@ class _AppsPageState extends ConsumerState<AppsPage> {
     if (scaffold?.isDrawerOpen ?? false) {
       scaffold!.closeDrawer();
     }
+  }
+
+  void _onDrawerOpened() {
+    if (!_loadingList) {
+      unawaited(_refreshProjects(autoOpenIfEmpty: false));
+    }
+  }
+
+  void _syncChrome() {
+    if (!widget.embedded || widget.onChromeChanged == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final history = _history.loadHistory();
+      final title = _activeProject?.title ?? '应用';
+      final subtitle = _activeSlug ?? '选择 Hermes 项目运行';
+      widget.onChromeChanged!(
+        WorkspaceChrome(
+          title: title,
+          subtitle: subtitle,
+          leading: IconButton(
+            tooltip: '项目列表',
+            icon: const Icon(Icons.menu),
+            onPressed: widget.onOpenDrawer,
+          ),
+          actions: [
+            if (_controller != null)
+              IconButton(
+                tooltip: '关闭应用',
+                onPressed: _closeProject,
+                icon: const Icon(Icons.close),
+              ),
+            IconButton(
+              tooltip: '刷新列表',
+              onPressed: _loadingList
+                  ? null
+                  : () => _refreshProjects(autoOpenIfEmpty: _controller == null),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+          drawer: _buildDrawer(history),
+        ),
+      );
+    });
   }
 
   void _closeProject() {
@@ -323,6 +381,11 @@ class _AppsPageState extends ConsumerState<AppsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) {
+      _syncChrome();
+      return _buildBody();
+    }
+
     final history = _history.loadHistory();
     final title = _activeProject?.title ?? '应用';
     final subtitle = _activeSlug;
@@ -366,19 +429,23 @@ class _AppsPageState extends ConsumerState<AppsPage> {
           child: Divider(height: 1, thickness: 1, color: AppColors.grayLight),
         ),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text(_error!, style: const TextStyle(color: Color(0xFFB00020), fontSize: 12)),
-            ),
-          if (_loadingPage)
-            const LinearProgressIndicator(minHeight: 2),
-          Expanded(child: _buildMainBody()),
-        ],
-      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(_error!, style: const TextStyle(color: Color(0xFFB00020), fontSize: 12)),
+          ),
+        if (_loadingPage)
+          const LinearProgressIndicator(minHeight: 2),
+        Expanded(child: _buildMainBody()),
+      ],
     );
   }
 

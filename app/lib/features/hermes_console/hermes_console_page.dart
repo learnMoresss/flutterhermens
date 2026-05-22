@@ -13,7 +13,9 @@ import '../../shared/widgets/mono_button.dart';
 import '../../shared/widgets/section_label.dart';
 
 class HermesConsolePage extends ConsumerStatefulWidget {
-  const HermesConsolePage({super.key});
+  const HermesConsolePage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   ConsumerState<HermesConsolePage> createState() => _HermesConsolePageState();
@@ -455,22 +457,24 @@ class _HermesConsolePageState extends ConsumerState<HermesConsolePage> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      padding: EdgeInsets.fromLTRB(24, widget.embedded ? 16 : 24, 24, 32),
       children: [
-        Text(
-          'Hermes 运维',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: AppColors.black,
-              ) ??
-              const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: AppColors.black,
-              ),
-        ),
-        const SizedBox(height: 8),
+        if (!widget.embedded) ...[
+          Text(
+            'Hermes 运维',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.black,
+                ) ??
+                const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.black,
+                ),
+          ),
+          const SizedBox(height: 8),
+        ],
         Text(
           '请求发往 Gateway，由网关在本机执行 tar / shell。\n'
           '鉴权与聊天相同：使用登录后获得的 JWT。Hermes 地址与网关 `.env` 请在服务器上编辑或通过部署脚本上传；修改磁盘文件后可使用下方「重载配置」。',
@@ -560,19 +564,19 @@ class _HermesConsolePageState extends ConsumerState<HermesConsolePage> {
         MonoButton(
           label: 'Agent 管理',
           outlined: true,
-          onPressed: _loading ? null : () => context.push('/home/config/agent'),
+          onPressed: _loading ? null : () => context.push('/home/workspace/agent'),
         ),
         const SizedBox(height: 12),
         MonoButton(
           label: '计划任务',
           outlined: true,
-          onPressed: _loading ? null : () => context.push('/home/config/schedules'),
+          onPressed: _loading ? null : () => context.push('/home/workspace/schedules'),
         ),
         const SizedBox(height: 12),
         MonoButton(
           label: '消息网关',
           outlined: true,
-          onPressed: _loading ? null : () => context.push('/home/config/message-gateway'),
+          onPressed: _loading ? null : () => context.push('/home/workspace/message-gateway'),
         ),
         const SizedBox(height: 28),
         const SectionLabel('高级运维'),

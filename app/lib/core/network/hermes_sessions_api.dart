@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../chat/session_display_sanitize.dart';
 import 'api_client.dart';
 
 class HermesSessionSummary {
@@ -31,16 +32,17 @@ class HermesSessionSummary {
 
     final id = (json['id'] ?? json['session_id'] ?? json['sessionId'] ?? '').toString();
     final titleRaw = json['title'] ?? json['name'] ?? json['preview'];
+    final rawTitle = (titleRaw?.toString().trim().isNotEmpty == true)
+        ? titleRaw.toString()
+        : '会话 $id';
     return HermesSessionSummary(
       id: id,
-      title: (titleRaw?.toString().trim().isNotEmpty == true)
-          ? titleRaw.toString()
-          : '会话 $id',
+      title: sanitizeSessionTitle(rawTitle, sessionId: id),
       model: json['model']?.toString(),
       messageCount: HermesSessionsApi.asInt(json['message_count'] ?? json['messageCount'] ?? 0),
       updatedAt: parseTime(json['updated_at'] ?? json['updatedAt'] ?? json['last_active'] ?? json['startedAt']),
-      preview: json['preview']?.toString(),
-      snippet: json['snippet']?.toString(),
+      preview: sanitizeSessionSnippet(json['preview']?.toString()),
+      snippet: sanitizeSessionSnippet(json['snippet']?.toString()),
     );
   }
 }
@@ -167,7 +169,11 @@ class HermesSessionsApi {
       return list
           .whereType<Map>()
           .map((e) => HermesSessionMessage.fromJson(Map<String, dynamic>.from(e)))
-          .where((m) => m.role == 'user' || m.role == 'assistant')
+          .where(
+            (m) =>
+                (m.role == 'user' || m.role == 'assistant') &&
+                !shouldHideHistoryMessage(m.role, m.content),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       throw ApiException(

@@ -206,6 +206,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           },
         ),
         const SizedBox(height: 32),
+        const SectionLabel('聊天'),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('自动批准设备操作'),
+          subtitle: const Text('AI 提出的日历、提醒等卡片将自动执行（默认关）'),
+          value: ref.watch(appStorageProvider).autoApproveDeviceActions,
+          onChanged: (v) async {
+            await ref.read(appStorageProvider).setAutoApproveDeviceActions(v);
+            if (context.mounted) {
+              AppMessage.info(v ? '已开启自动批准设备操作' : '已关闭自动批准设备操作');
+            }
+            setState(() {});
+          },
+        ),
+        const SizedBox(height: 32),
         const SectionLabel('存储'),
         const SizedBox(height: 8),
         Text(

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
+import { sanitizeSessionsPayload } from '../admin/session-display-sanitize.js';
 import { dashboardSessionsEnabled, loadConfig } from '../config.js';
 import { fetchHermesDashboard } from '../hermes/dashboard.js';
 
@@ -32,7 +33,9 @@ async function proxyDashboardJson(
   const ct = res.headers.get('content-type') ?? 'application/json';
   reply.code(res.status).header('Content-Type', ct);
   try {
-    reply.send(JSON.parse(txt));
+    const parsed = JSON.parse(txt);
+    const sanitized = sanitizeSessionsPayload(parsed);
+    reply.send(sanitized);
   } catch {
     reply.send(txt);
   }

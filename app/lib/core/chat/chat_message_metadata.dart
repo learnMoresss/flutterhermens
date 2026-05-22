@@ -3,6 +3,7 @@ import 'dart:typed_data';
 const kChatMetaImagesKey = 'images';
 const kChatMetaFileKey = 'file';
 const kHermesLoadingText = '…';
+const kInterruptedFooter = '\n\n---\n*（已中断）*';
 
 /// 输入框待发送图片（本地 previewBytes 仅用于 UI 预览）。
 class PendingChatImage {
