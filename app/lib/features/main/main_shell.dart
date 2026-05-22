@@ -38,6 +38,11 @@ class MainShell extends StatelessWidget {
                   label: '聊天',
                 ),
                 BottomNavigationBarItem(
+                  icon: Icon(Icons.apps_outlined),
+                  activeIcon: Icon(Icons.apps),
+                  label: '应用',
+                ),
+                BottomNavigationBarItem(
                   icon: Icon(Icons.dashboard_outlined),
                   activeIcon: Icon(Icons.dashboard),
                   label: '工作台',

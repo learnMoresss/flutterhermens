@@ -388,7 +388,7 @@ class _AppsPageState extends ConsumerState<AppsPage> {
 
     final history = _history.loadHistory();
     final title = _activeProject?.title ?? '应用';
-    final subtitle = _activeSlug;
+    final subtitle = _activeSlug ?? '选择 Hermes 项目运行';
 
     return Scaffold(
       onDrawerChanged: (opened) {
@@ -402,7 +402,7 @@ class _AppsPageState extends ConsumerState<AppsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            if (subtitle != null && subtitle.isNotEmpty)
+            if (subtitle.isNotEmpty)
               Text(
                 subtitle,
                 maxLines: 1,

@@ -300,7 +300,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
       showDivider: true,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
-        onPressed: () => context.go('/home/workspace?tab=1'),
+        onPressed: () => context.go('/home/workspace?tab=0'),
       ),
       body: RefreshIndicator(
         onRefresh: _load,

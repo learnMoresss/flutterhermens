@@ -24,7 +24,7 @@ class AgentHubPage extends StatelessWidget {
       showDivider: true,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
-        onPressed: () => context.go('/home/workspace?tab=1'),
+        onPressed: () => context.go('/home/workspace?tab=0'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),

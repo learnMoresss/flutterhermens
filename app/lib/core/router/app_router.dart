@@ -18,6 +18,7 @@ import '../../features/agent/agent_providers_page.dart' deferred as agent_provid
 import '../../features/agent/agent_skills_page.dart' deferred as agent_skills;
 import '../../features/agent/agent_soul_page.dart' deferred as agent_soul;
 import '../../features/agent/agent_toolsets_page.dart' deferred as agent_toolsets;
+import '../../features/apps/apps_page.dart' deferred as apps;
 import '../../features/chat/chat_page.dart' deferred as chat;
 import '../../features/gateway/message_gateway_page.dart' deferred as message_gateway;
 import '../../features/main/workspace_page.dart' deferred as workspace;
@@ -75,6 +76,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home/apps',
+                builder: (context, state) => deferredPage(
+                  loadLibrary: apps.loadLibrary,
+                  builder: () => apps.AppsPage(),
+                ),
               ),
             ],
           ),
@@ -181,16 +193,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         redirect: (context, state) => '/home/chat',
       ),
       GoRoute(
-        path: '/home/apps',
-        redirect: (context, state) => '/home/workspace',
-      ),
-      GoRoute(
         path: '/home/config',
-        redirect: (context, state) => '/home/workspace?tab=1',
+        redirect: (context, state) => '/home/workspace?tab=0',
       ),
       GoRoute(
         path: '/home/docker',
-        redirect: (context, state) => '/home/workspace?tab=2',
+        redirect: (context, state) => '/home/workspace?tab=1',
       ),
     ],
   );
