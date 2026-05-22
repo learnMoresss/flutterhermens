@@ -177,4 +177,4 @@ flutterhermens/
 
 ## License
 
-Private / no license specified yet — add a LICENSE before public release.
+This project is licensed under the [MIT License](LICENSE).

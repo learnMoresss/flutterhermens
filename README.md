@@ -195,4 +195,4 @@ flutterhermens/
 
 ## License
 
-Private / 未指定开源协议 — 发布到 GitHub 前请自行添加 LICENSE。
+本项目采用 [MIT License](LICENSE) 开源。

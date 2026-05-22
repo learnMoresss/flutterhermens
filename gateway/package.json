@@ -1,6 +1,7 @@
 {
   "name": "hermes-gateway",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "description": "BFF gateway for Hermes mobile client → Hermes Web API",
   "type": "module",
