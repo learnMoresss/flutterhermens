@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>静态演示</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 1.2rem; margin-bottom: 8px; }
+    p { color: #666; font-size: 14px; line-height: 1.5; }
+    button {
+      display: block; width: 100%; min-height: 48px; margin: 10px 0;
+      font-size: 16px; border: 1px solid #111; border-radius: 6px; background: #fff;
+    }
+    button.primary { background: #111; color: #fff; }
+    #preview { max-width: 100%; margin-top: 12px; border-radius: 8px; }
+    .warn { color: #b00020; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Hermes 静态 App</h1>
+  <p id="status">加载宿主能力…</p>
+  <div id="actions" hidden>
+    <button type="button" class="primary" id="pickBtn">选择图片（HermesApp）</button>
+    <button type="button" id="toastBtn">Toast 测试</button>
+    <img id="preview" alt="" hidden />
+  </div>
+  <p id="fallback" class="warn" hidden>请在 Hermes Mobile App 的「应用 Tab」中打开此页面。</p>
+  <script>
+    (async function () {
+      await HermesApp.ready();
+      const p = HermesApp.getProject();
+      const status = document.getElementById('status');
+      if (p) status.textContent = '项目: ' + p.slug;
+      if (!HermesApp.isAvailable) {
+        document.getElementById('fallback').hidden = false;
+        return;
+      }
+      document.getElementById('actions').hidden = false;
+      document.getElementById('pickBtn').onclick = async function () {
+        const r = await HermesApp.pickImage({ source: 'gallery', compress: true, upload: false });
+        if (!r.ok) {
+          if (r.code !== 'CANCELLED') await HermesApp.toast(r.message || '选图失败');
+          return;
+        }
+        const img = document.getElementById('preview');
+        img.src = 'data:' + r.mimeType + ';base64,' + r.base64;
+        img.hidden = false;
+        await HermesApp.toast('已选择 ' + r.filename);
+      };
+      document.getElementById('toastBtn').onclick = function () {
+        HermesApp.toast('HermesApp 工作正常');
+      };
+    })();
+  </script>
+</body>
+</html>

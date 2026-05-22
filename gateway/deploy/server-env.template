@@ -1,0 +1,18 @@
+# 与 App「初始化引导」复制片段一致；复制到服务器 ~/gateway/.env 后修改 JWT_SECRET。
+
+NODE_ENV=production
+PORT=3000
+HOST=0.0.0.0
+
+JWT_SECRET=请替换为 openssl rand -hex 24 的输出
+
+HERMES_API_ORIGIN=http://172.18.0.1:8642
+HERMES_DASHBOARD_ORIGIN=http://172.18.0.1:9119
+HERMES_API_SERVER_KEY=与宿主机 ~/.hermes/.env 中 API_SERVER_KEY 一致
+HERMES_DASHBOARD_TOKEN=
+
+GATEWAY_AUTH_USER=syl
+GATEWAY_AUTH_PASSWORD=请填写 App 登录密码
+
+HERMES_BACKUP_SOURCE=/data/hermes
+HERMES_BACKUP_DIR=/data/hermes-backups

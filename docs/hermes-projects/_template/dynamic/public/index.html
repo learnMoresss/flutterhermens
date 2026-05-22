@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>动态演示</title>
+</head>
+<body>
+  <h1>动态 App</h1>
+  <button id="btn">Ping API</button>
+  <pre id="out"></pre>
+  <script>
+    document.getElementById('btn').onclick = async () => {
+      const base = window.__HERMES_PROJECT__?.apiBase || './api';
+      const r = await fetch(base + '/ping');
+      document.getElementById('out').textContent = await r.text();
+    };
+  </script>
+</body>
+</html>

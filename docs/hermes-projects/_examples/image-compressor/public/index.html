@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>图片压缩器</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 16px; background: #0a0a0f; color: #e2e8f0;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; font-weight: 700; }
+    .sub { color: #94a3b8; font-size: 12px; margin-bottom: 16px; }
+    .panel {
+      background: #13131a; border-radius: 12px; padding: 16px; margin-bottom: 12px;
+    }
+    .upload-zone {
+      border: 2px dashed #2a2a3a; border-radius: 16px; padding: 36px 16px;
+      text-align: center; cursor: pointer; background: #1a1a24; transition: border-color .2s;
+    }
+    .upload-zone:active { border-color: #6366f1; background: rgba(99,102,241,.08); }
+    .upload-zone .icon { font-size: 2.2rem; margin-bottom: 8px; }
+    .upload-zone p { margin: 0; color: #94a3b8; font-size: 14px; }
+    .upload-zone .hint { margin-top: 6px; font-size: 12px; color: #64748b; }
+    button {
+      width: 100%; min-height: 48px; border: none; border-radius: 8px;
+      font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 10px;
+    }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-secondary { background: #2a2a35; color: #eee; }
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-row button { flex: 1; margin: 0; min-height: 48px; }
+    label { display: block; font-size: 13px; color: #aaa; margin: 12px 0 6px; }
+    input[type=range] { width: 100%; }
+    .row { display: flex; gap: 8px; }
+    .row img { width: 50%; border-radius: 8px; background: #111; min-height: 120px; object-fit: contain; }
+    .meta { font-size: 11px; color: #777; margin-top: 8px; line-height: 1.5; }
+    .warn { color: #f87171; font-size: 13px; padding: 12px; background: #1a1010; border-radius: 8px; }
+    .hidden { display: none !important; }
+    select { width: 100%; min-height: 44px; border-radius: 8px; padding: 8px; background: #1a1a24; color: #eee; border: 1px solid #2a2a3a; }
+  </style>
+</head>
+<body>
+  <h1>🖼️ 图片压缩器</h1>
+  <p class="sub">HermesApp 原生选图 · 本地压缩 · 无上传</p>
+
+  <div id="notInApp" class="warn hidden">请在 Hermes Mobile App「应用 Tab」内打开。</div>
+
+  <div id="app" class="hidden">
+    <div class="panel">
+      <div class="upload-zone" id="pickZone" role="button" tabindex="0">
+        <div class="icon">📁</div>
+        <p>点击选择图片</p>
+        <p class="hint">支持 JPG · PNG · WebP · GIF</p>
+      </div>
+      <p class="meta">图片仅在本地处理，不会上传到任何服务器</p>
+    </div>
+
+    <div id="editor" class="panel hidden">
+      <div class="row">
+        <div><img id="imgOrig" alt="原图" /><p class="meta" id="origMeta"></p></div>
+        <div><img id="imgOut" alt="压缩后" /><p class="meta" id="outMeta"></p></div>
+      </div>
+      <label>质量 <span id="qVal">80</span>%</label>
+      <input type="range" id="quality" min="10" max="95" value="80" />
+      <label>最大宽度 <span id="wVal">1600</span>px</label>
+      <input type="range" id="maxW" min="400" max="2400" step="100" value="1600" />
+      <label>输出格式</label>
+      <select id="fmt">
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/webp">WebP</option>
+        <option value="image/png">PNG</option>
+      </select>
+      <button type="button" class="btn-secondary" id="recompressBtn">重新压缩</button>
+      <div class="btn-row">
+        <button type="button" class="btn-primary" id="saveBtn">保存到相册</button>
+        <button type="button" class="btn-secondary" id="shareBtn">分享</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sourceImg = null;
+    let outBase64 = '';
+    let outMime = 'image/jpeg';
+    let outName = 'compressed.jpg';
+    let picking = false;
+
+    function b64ToBlob(b64, mime) {
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: mime });
+    }
+
+    function compressCanvas(img, quality, maxW, mime) {
+      const ratio = Math.min(1, maxW / img.width);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL(mime, quality / 100);
+      const base64 = dataUrl.split(',')[1];
+      const blob = b64ToBlob(base64, mime);
+      return { base64: base64, blob: blob, w: w, h: h, size: blob.size };
+    }
+
+    function loadImageFromBase64(b64, mime) {
+      return new Promise(function (resolve, reject) {
+        const img = new Image();
+        img.onload = function () { resolve(img); };
+        img.onerror = reject;
+        img.src = 'data:' + mime + ';base64,' + b64;
+      });
+    }
+
+    async function runCompress() {
+      if (!sourceImg) return;
+      const q = Number(document.getElementById('quality').value);
+      const maxW = Number(document.getElementById('maxW').value);
+      const mime = document.getElementById('fmt').value;
+      document.getElementById('qVal').textContent = q;
+      document.getElementById('wVal').textContent = maxW;
+      const out = compressCanvas(sourceImg, q, maxW, mime);
+      outBase64 = out.base64;
+      outMime = mime;
+      outName = mime === 'image/png' ? 'compressed.png' : mime === 'image/webp' ? 'compressed.webp' : 'compressed.jpg';
+      document.getElementById('imgOut').src = 'data:' + mime + ';base64,' + out.base64;
+      document.getElementById('outMeta').textContent = out.w + '×' + out.h + ' · ' + (out.size / 1024).toFixed(1) + ' KB';
+    }
+
+    async function pickImage() {
+      if (picking) return;
+      picking = true;
+      try {
+        const r = await HermesApp.pickImage({ source: 'gallery', compress: false, upload: false });
+        if (!r.ok) {
+          if (r.code !== 'CANCELLED') await HermesApp.toast(r.message || '选图失败');
+          return;
+        }
+        sourceImg = await loadImageFromBase64(r.base64, r.mimeType);
+        document.getElementById('imgOrig').src = 'data:' + r.mimeType + ';base64,' + r.base64;
+        document.getElementById('origMeta').textContent = sourceImg.width + '×' + sourceImg.height + ' · ' + (r.size / 1024).toFixed(1) + ' KB';
+        document.getElementById('editor').classList.remove('hidden');
+        await runCompress();
+        await HermesApp.toast('已加载图片');
+      } finally {
+        picking = false;
+      }
+    }
+
+    (async function init() {
+      await HermesApp.ready();
+      if (!HermesApp.isAvailable) {
+        document.getElementById('notInApp').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('app').classList.remove('hidden');
+
+      document.getElementById('pickZone').addEventListener('click', pickImage);
+      document.getElementById('pickZone').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickImage(); }
+      });
+
+      document.getElementById('quality').oninput = runCompress;
+      document.getElementById('maxW').oninput = runCompress;
+      document.getElementById('fmt').onchange = runCompress;
+      document.getElementById('recompressBtn').onclick = runCompress;
+
+      document.getElementById('saveBtn').onclick = async function () {
+        if (!outBase64) return HermesApp.toast('请先选择并压缩图片');
+        const r = await HermesApp.saveFile({ base64: outBase64, filename: outName, mimeType: outMime });
+        if (!r.ok) await HermesApp.toast(r.message || '保存失败');
+      };
+
+      document.getElementById('shareBtn').onclick = async function () {
+        if (!outBase64) return HermesApp.toast('请先选择并压缩图片');
+        const r = await HermesApp.shareFile({
+          base64: outBase64,
+          filename: outName,
+          mimeType: outMime,
+          title: '压缩后的图片',
+        });
+        if (!r.ok) await HermesApp.toast(r.message || '分享失败');
+      };
+    })();
+  </script>
+</body>
+</html>

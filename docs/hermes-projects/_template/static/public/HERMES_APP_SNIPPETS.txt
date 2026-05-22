@@ -1,0 +1,2 @@
+HermesApp 调用示例不在此文件 — Gateway 打开页面时会自动注入 window.__HERMES_APP_SNIPPETS__。
+新建 static 项目请复制 docs/hermes-projects/_template/static/public/index.html 或 _examples/image-compressor/。

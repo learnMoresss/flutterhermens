@@ -1,0 +1,7 @@
+{
+  "id": "image-compressor",
+  "title": "图片压缩器",
+  "type": "static",
+  "version": "1.0.0",
+  "frontend": { "entry": "public/index.html" }
+}

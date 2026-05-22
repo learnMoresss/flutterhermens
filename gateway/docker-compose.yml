@@ -1,0 +1,21 @@
+services:
+  hermes-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hermes-gateway:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      # 与 gateway-deploy.env 路径一致（Phase 5 必需）
+      - /home/ubuntu/.hermes:/home/ubuntu/.hermes
+      - /data/hermes:/data/hermes
+      - /data/hermes-backups:/data/hermes-backups
+      - /data/gateway-uploads:/data/gateway-uploads
+      - /data/hermes-projects:/data/hermes-projects
+      - /tmp:/tmp:ro

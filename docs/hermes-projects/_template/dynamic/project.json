@@ -1,0 +1,11 @@
+{
+  "id": "demo-dynamic",
+  "title": "动态演示",
+  "type": "dynamic",
+  "version": "1.0.0",
+  "backend": {
+    "command": "node index.mjs",
+    "cwd": "server",
+    "healthPath": "/health"
+  }
+}

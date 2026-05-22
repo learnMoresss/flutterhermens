@@ -1,0 +1,8 @@
+{
+  "id": "demo-static",
+  "title": "静态演示",
+  "type": "static",
+  "version": "1.0.0",
+  "description": "Hermes Mobile 静态项目模板",
+  "frontend": { "entry": "public/index.html" }
+}

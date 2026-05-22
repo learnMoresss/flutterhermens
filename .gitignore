@@ -1,0 +1,49 @@
+# ── 密钥与本地机密（切勿提交）──
+*.pem
+*.key
+*.p12
+*.jks
+id_rsa
+id_ed25519
+syl.pem
+
+# 环境变量（仅 *.example 可提交）
+.env
+.env.*
+!.env.example
+!**/*.env.example
+scripts/gateway-deploy.env.local
+scripts/hermes-remote.env
+~/.hermes-remote.env
+
+# ── 本地运维/部署脚本（不入库；模板见 docs/deploy/）──
+scripts/
+
+# ── 构建与临时产物 ──
+gateway-dist.tgz
+tmp-video.mp4
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# ── Node / Gateway ──
+gateway/node_modules/
+gateway/dist/
+
+# ── Flutter / Dart ──
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.pub-cache/
+app/.pub/
+
+# ── IDE / OS ──
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ── 日志 ──
+*.log

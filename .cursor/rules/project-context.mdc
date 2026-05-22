@@ -1,0 +1,75 @@
+---
+description: Flutter Hermes 项目背景、服务器连接与架构方向
+alwaysApply: true
+---
+
+# 项目背景
+
+本项目目标：通过 **Node Gateway 中转层 + Flutter 薄壳客户端**，将 Hermes WebUI 能力移动端化。
+
+核心架构：
+
+```text
+Flutter App → Node Gateway (BFF) → Hermes Web API
+```
+
+详细设计见 `docs/架构计划书.md`。
+
+# 开发服务器（SSH）
+
+| 项 | 值 |
+|---|---|
+| 地址 | `119.45.30.73` |
+| 端口 | `22` |
+| 用户 | **`ubuntu`**（当前可用；`root` + 密钥视云端是否绑定） |
+| 统一脚本 | [`scripts/hermes-remote.sh`](scripts/hermes-remote.sh)（一次配置 `~/.hermes-remote.env`，避免每次敲长命令） |
+| 密钥 | `syl.pem`（若服务端 `authorized_keys` 已配置则可用 `HERMES_SSH_KEY`） |
+| 密码 | 勿写入仓库；用环境变量 `HERMES_SSH_PASS` + `sshpass`（见脚本说明） |
+
+**推荐用法（WSL）：**
+
+```bash
+# 首次: cp scripts/hermes-remote.env.example ~/.hermes-remote.env && chmod 600 ~/.hermes-remote.env
+# 编辑填入 HERMES_SSH_PASS 或 HERMES_SSH_KEY，再在 ~/.bashrc 里 source ~/.hermes-remote.env
+
+./scripts/hermes-remote.sh ssh
+./scripts/hermes-remote.sh upload-gateway
+./scripts/hermes-remote.sh gateway-docker-up   # 上传 + Docker Compose（需 HERMES_SSH_PASS，一般同 ubuntu 密码）
+```
+
+手动示例：
+
+```bash
+ssh ubuntu@119.45.30.73
+```
+
+# Gateway 登录（与 App 对齐）
+
+- **REST**: `POST {gateway}/v1/login`，JSON **`username`**、**`password`**（转发 Hermes）；成功返回 **`token`**（JWT，内含 `hermesToken`）、**`expiresAt`**。
+- **后续**: `Authorization: Bearer <token>` 调用 `/v1/chat/completions`。
+- **环境**: **`HERMES_ORIGIN`**、备份路径等见 [gateway/AUTH.md](gateway/AUTH.md)。
+- **App**：`ApiClient` 仅请求已配置的 Gateway URL，不在端内做假数据中转。
+
+## 连接不稳定说明（正常）
+
+SSH 连接时好时坏是**正常现象**，原因：
+
+- 开发环境开了**国外代理**
+- 服务器在**国内**
+- 流量经代理绕行，TCP/SSH 握手易超时或 banner exchange 失败
+
+排查时优先确认安全组放行 TCP 22，不要误判为密钥问题。密钥格式已验证可用（`ssh-keygen -y -f syl.pem`）。
+
+# 架构原则
+
+1. **Flutter 只做 UI**，不直接碰 Hermes 逻辑
+2. **Node Gateway 做 BFF**：鉴权、WebSocket 透传、SSE 流式转换、文件上传代理
+3. **对外统一 OpenAI-compatible API**，便于未来换后端
+4. 优先用现成 Flutter 组件（`flutter_chat_ui`、`dio`、`riverpod`、`web_socket_channel`）
+
+# 关键风险（实现时注意）
+
+- WebSocket 断线重连 + session 恢复
+- Hermes stream 格式 → 统一为 OpenAI stream → Flutter
+- Token 生命周期 / refresh / re-login
+- 文件权限：Hermes 返回 URL 还是 internal id

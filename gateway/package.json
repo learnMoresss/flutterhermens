@@ -1,0 +1,27 @@
+{
+  "name": "hermes-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BFF gateway for Hermes mobile client → Hermes Web API",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json && node --input-type=module -e \"import fs from 'node:fs'; if (fs.existsSync('skills')) fs.cpSync('skills','dist/skills',{recursive:true}); if (fs.existsSync('public')) fs.cpSync('public','dist/public',{recursive:true});\"",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.7.2",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
