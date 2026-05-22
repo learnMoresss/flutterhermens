@@ -3,8 +3,9 @@
 Flutter 薄壳客户端，通过 Gateway BFF 连接 Hermes。
 
 - 主文档：[../README.md](../README.md) · [../README.en.md](../README.en.md)
+- **安装 APK**：[GitHub Releases](https://github.com/learnMoresss/flutterhermens/releases/latest)
 - 运行：`flutter pub get` → `flutter run --release`
-- Release APK：`flutter build apk --release`
+- 打 Release 包：[../docs/deploy/RELEASE.md](../docs/deploy/RELEASE.md)
 
 ## 主要功能
 

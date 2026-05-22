@@ -38,3 +38,5 @@ flutter run --release
 ```
 
 App 首次启动在「设置」中填写 Gateway 地址（如 `http://your-host:3000`），再登录。
+
+**不想编译？** 直接从 [GitHub Releases](https://github.com/learnMoresss/flutterhermens/releases/latest) 下载 `app-release.apk`。发布流程见 [RELEASE.md](../docs/deploy/RELEASE.md)。

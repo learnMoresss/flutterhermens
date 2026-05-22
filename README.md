@@ -2,6 +2,8 @@
 
 将 [Hermes](https://github.com/NousResearch/hermes) 能力移动端化的 **Flutter 薄壳客户端** + **Node Gateway 中转层（BFF）**  monorepo。
 
+**Android 安装包** → [GitHub Releases 下载 APK](https://github.com/learnMoresss/flutterhermens/releases/latest)（无需克隆仓库、无需 Flutter 环境）
+
 ```text
 Flutter App  →  Node Gateway (BFF)  →  Hermes API Server / Dashboard
      │                    │
@@ -58,6 +60,36 @@ Flutter App  →  Node Gateway (BFF)  →  Hermes API Server / Dashboard
 
 ---
 
+## Android 安装（Release APK）
+
+面向使用者：**直接从 GitHub Releases 安装**，不用编译源码。
+
+1. 打开 **[Releases 页面](https://github.com/learnMoresss/flutterhermens/releases)**，进入最新版本（[Latest](https://github.com/learnMoresss/flutterhermens/releases/latest)）。
+2. 在 **Assets** 中下载安装包（[v1.0.0+](https://github.com/learnMoresss/flutterhermens/releases/latest)）：
+
+| 文件 | 适用 |
+|------|------|
+| **app-release.apk** | 通用包（不确定机型时选这个） |
+| **app-arm64-v8a-release.apk** | 主流 64 位 Android 手机（推荐） |
+| **app-armeabi-v7a-release.apk** | 旧 32 位设备 |
+| **app-x86_64-release.apk** | 模拟器 / x86 设备 |
+
+3. 传到手机安装；若系统提示「未知来源」，在设置中允许该安装来源。
+4. 首次打开 App → **设置 / 初次配置** 中填写 **Gateway 地址**（如 `http://your-server:3000`）→ 登录。
+
+> App 只负责连接你已部署的 Gateway；**Gateway 与 Hermes 仍需在服务器侧单独部署**（见下文「快速开始」）。  
+> 无现成 Gateway 的用户需先按 [`docs/deploy/README.md`](docs/deploy/README.md) 部署 BFF。
+
+### 命令行安装（ADB，可选）
+
+```bash
+# 将 YOUR_VERSION 换成 Release 标签，如 v1.0.0
+gh release download --repo learnMoresss/flutterhermens --pattern "*.apk" --dir .
+adb install -r app-release.apk
+```
+
+---
+
 ## 快速开始
 
 ### 1. 启动 Gateway
@@ -88,11 +120,13 @@ flutter pub get
 flutter run --release
 ```
 
-Release APK：
+Release APK（**维护者发布到 GitHub，见 [`docs/deploy/RELEASE.md`](docs/deploy/RELEASE.md)**）：
 
 ```bash
+cd app
 flutter build apk --release
-# 产物: app/build/app/outputs/flutter-apk/app-release.apk
+# 本地产物: app/build/app/outputs/flutter-apk/app-release.apk
+# 上传至 GitHub Release Assets，供用户下载安装
 ```
 
 首次打开：在设置页填写 **Gateway 地址**（如 `http://192.168.x.x:3000`）→ 登录 → 使用聊天 / 应用 Tab。
@@ -155,6 +189,7 @@ flutterhermens/
 | [docs/hermes-projects/HOST-API.md](docs/hermes-projects/HOST-API.md) | HermesApp WebView API |
 | [docs/hermes-projects/PROJECTS.md](docs/hermes-projects/PROJECTS.md) | 应用项目目录规范 |
 | [docs/deploy/README.md](docs/deploy/README.md) | 部署与环境变量模板 |
+| [docs/deploy/RELEASE.md](docs/deploy/RELEASE.md) | **发布 Release APK 到 GitHub** |
 
 ---
 

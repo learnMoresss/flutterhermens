@@ -2,6 +2,8 @@
 
 A **thin Flutter client** and **Node.js BFF gateway** that bring [Hermes](https://github.com/NousResearch/hermes) to mobile.
 
+**Android APK** → [Download from GitHub Releases](https://github.com/learnMoresss/flutterhermens/releases/latest) (no Flutter SDK required)
+
 ```text
 Flutter App  →  Node Gateway (BFF)  →  Hermes API Server / Dashboard
      │                    │
@@ -58,6 +60,34 @@ See [`docs/架构计划书.md`](docs/架构计划书.md) (Chinese architecture d
 
 ---
 
+## Install on Android (Release APK)
+
+For end users: **install from GitHub Releases** — no need to clone or build.
+
+1. Open **[Releases](https://github.com/learnMoresss/flutterhermens/releases)** ([Latest](https://github.com/learnMoresss/flutterhermens/releases/latest)).
+2. Under **Assets**, pick an APK ([Latest release](https://github.com/learnMoresss/flutterhermens/releases/latest)):
+
+| File | Use when |
+|------|----------|
+| **app-release.apk** | Universal (if unsure) |
+| **app-arm64-v8a-release.apk** | Most 64-bit phones (recommended) |
+| **app-armeabi-v7a-release.apk** | Older 32-bit devices |
+| **app-x86_64-release.apk** | Emulator / x86 |
+
+3. Install on your device; allow installs from unknown sources if prompted.
+4. First launch → enter your **Gateway URL** in setup (e.g. `http://your-server:3000`) → log in.
+
+> The app connects to **your** Gateway; deploy Gateway + Hermes on a server first ([`docs/deploy/README.md`](docs/deploy/README.md)).
+
+### ADB (optional)
+
+```bash
+gh release download --repo learnMoresss/flutterhermens --pattern "*.apk" --dir .
+adb install -r app-release.apk
+```
+
+---
+
 ## Quick start
 
 ### Gateway
@@ -83,11 +113,13 @@ flutter pub get
 flutter run --release
 ```
 
-Release APK:
+Release APK (**maintainers publish to GitHub** — see [`docs/deploy/RELEASE.md`](docs/deploy/RELEASE.md)):
 
 ```bash
+cd app
 flutter build apk --release
-# Output: app/build/app/outputs/flutter-apk/app-release.apk
+# Local: app/build/app/outputs/flutter-apk/app-release.apk
+# Upload as a GitHub Release asset
 ```
 
 First launch: set **Gateway URL** in setup (e.g. `http://192.168.x.x:3000`) → login → chat / apps.
@@ -139,6 +171,7 @@ flutterhermens/
 | [gateway/AUTH.md](gateway/AUTH.md) | Auth, Docker, create_app_mode |
 | [docs/hermes-projects/HOST-API.md](docs/hermes-projects/HOST-API.md) | HermesApp WebView API |
 | [docs/deploy/README.md](docs/deploy/README.md) | Deployment templates |
+| [docs/deploy/RELEASE.md](docs/deploy/RELEASE.md) | **Publish APK to GitHub Releases** |
 
 ---
 
